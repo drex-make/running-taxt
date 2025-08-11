@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Running Lyrics</title>
+  <style>
+    :root{
+      --speed: 20s; /* default duration for one loop */
+    }
+    body{
+      font-family: Inter, system-ui, Arial, sans-serif;
+      background: linear-gradient(180deg,#0f172a,#071129);
+      color: #fff;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      height:100vh;
+      margin:0;
+      padding:20px;
+      box-sizing:border-box;
+    }
+
+    .player {
+      width: 100%;
+      max-width:1000px;
+      background: rgba(255,255,255,0.04);
+      border-radius:12px;
+      padding:16px;
+      box-shadow: 0 6px 24px rgba(2,6,23,0.6);
+      backdrop-filter: blur(6px);
+    }
+
+    .marquee-wrap{
+      overflow:hidden;
+      white-space:nowrap;
+      border-radius:8px;
+      background: rgba(0,0,0,0.35);
+      padding:18px 12px;
+      position:relative;
+      height:120px;
+      display:flex;
+      align-items:center;
+    }
+
+    /* the moving track */
+    .marquee {
+      display:inline-block;
+      will-change:transform;
+      /* animation applied dynamically via JS to control speed/pause */
+      animation: scroll var(--speed) linear infinite;
+      font-size:18px;
+      line-height:1.6;
+    }
+
+    /* duplicate content spacing so the loop is seamless */
+    .marquee .segment {
+      display:inline-block;
+      margin-right:60px; /* gap between repeats */
+    }
+
+    @keyframes scroll {
+      from { transform: translateX(0%); }
+      to   { transform: translateX(-50%); } /* we duplicate content; -50% moves one copy out */
+    }
+
+    /* Controls */
+    .controls{
+      margin-top:12px;
+      display:flex;
+      gap:8px;
+      align-items:center;
+      flex-wrap:wrap;
+    }
+    .btn{
+      background:#0ea5a0;
+      color:#012;
+      border:none;
+      padding:8px 12px;
+      border-radius:8px;
+      cursor:pointer;
+      font-weight:600;
+    }
+    .btn.secondary{ background:#94a3b8; color:#042; }
+    label{ font-size:14px; color:#cbd5e1; }
+
+    textarea{
+      width:100%;
+      min-height:120px;
+      margin-top:12px;
+      border-radius:8px;
+      padding:8px;
+      resize:vertical;
+      border:1px solid rgba(255,255,255,0.06);
+      background: rgba(255,255,255,0.02);
+      color: #fff;
+    }
+
+    .small { font-size:13px; color:#cbd5e1; }
+  </style>
+</head>
+<body>
+  <div class="player">
+    <h2 style="margin:0 0 8px 0">Running Lyrics — tempel lirik Anda</h2>
+
+    <div class="marquee-wrap" aria-hidden="false">
+      <div id="marquee" class="marquee" aria-live="polite">
+        <!-- JS akan mengisi .segment di sini -->
+      </div>
+    </div>
+
+    <div class="controls">
+      <button id="playPause" class="btn">Pause</button>
+      <button id="faster" class="btn secondary">Lebih Cepat</button>
+      <button id="slower" class="btn secondary">Lebih Lambat</button>
+
+      <label class="small" style="margin-left:8px;">
+        Kecepatan:
+        <input id="speedRange" type="range" min="5" max="60" step="1" value="20" />
+        <span id="speedLabel">20s</span>
+      </label>
+    </div>
+
+    <textarea id="lyricsInput" placeholder="Tempel lirik Anda di sini. Jangan menempelkan lirik yang dilindungi hak cipta jika Anda tidak memilikinya."></textarea>
+    <div style="display:flex; gap:8px; margin-top:8px; align-items:center;">
+      <button id="apply" class="btn">Terapkan & Jalankan</button>
+      <button id="loadFile" class="btn secondary">Muat dari file (.txt)</button>
+      <input id="fileInput" type="file" accept=".txt" style="display:none" />
+      <span class="small">Atau tempel lirik lalu klik "Terapkan & Jalankan".</span>
+    </div>
+  </div>
+
+  <script>
+    // Elemen penting
+    const marquee = document.getElementById('marquee');
+    const input = document.getElementById('lyricsInput');
+    const applyBtn = document.getElementById('apply');
+    const playPauseBtn = document.getElementById('playPause');
+    const speedRange = document.getElementById('speedRange');
+    const speedLabel = document.getElementById('speedLabel');
+    const fasterBtn = document.getElementById('faster');
+    const slowerBtn = document.getElementById('slower');
+    const fileInput = document.getElementById('fileInput');
+    const loadFileBtn = document.getElementById('loadFile');
+
+    let isPlaying = true;
+
+    // buat isi marquee dengan 2 segmen untuk loop halus
+    function setMarqueeContent(text){
+      // bersihkan
+      marquee.innerHTML = '';
+
+      // Normalize newline -> gunakan ' • ' sebagai pemisah baris dalam satu baris panjang,
+      // atau gunakan <br> jika ingin multiple-line dalam segment.
+      // Di sini kita gabungkan baris menjadi satu block yang dipisah tanda ' — ' agar mudah digulir.
+      const lines = text.split(/\r?\n/).map(s=>s.trim()).filter(s=>s.length);
+      if(lines.length === 0){
+        marquee.innerHTML = '<span class="segment">Tempel lirik di area bawah lalu klik "Terapkan & Jalankan".</span><span class="segment"> — </span>';
+        return;
+      }
+
+      // Gabungkan menjadi satu string panjang (anda bisa ganti pemisah sesuai selera)
+      const joined = lines.join('  •  ');
+      // buat dua segment identik agar animasi yang berpindah -50% terasa mulus
+      const seg1 = document.createElement('span');
+      seg1.className = 'segment';
+      seg1.textContent = joined;
+
+      const seg2 = document.createElement('span');
+      seg2.className = 'segment';
+      seg2.textContent = joined;
+
+      marquee.appendChild(seg1);
+      marquee.appendChild(seg2);
+    }
+
+    // apply pada klik
+    applyBtn.addEventListener('click', ()=>{
+      const txt = input.value;
+      setMarqueeContent(txt);
+      // restart animation (bahkan bila speed sama)
+      restartAnimation();
+    });
+
+    // play/pause
+    function pauseMarquee(){
+      marquee.style.animationPlayState = 'paused';
+      isPlaying = false;
+      playPauseBtn.textContent = 'Play';
+    }
+    function playMarquee(){
+      marquee.style.animationPlayState = 'running';
+      isPlaying = true;
+      playPauseBtn.textContent = 'Pause';
+    }
+
+    playPauseBtn.addEventListener('click', ()=>{
+      if(isPlaying) pauseMarquee(); else playMarquee();
+    });
+
+    // kontrol kecepatan (duration dalam detik)
+    function setSpeedSec(seconds){
+      document.documentElement.style.setProperty('--speed', seconds + 's');
+      speedRange.value = seconds;
+      speedLabel.textContent = seconds + 's';
+      // restart animation so duration takes effect immediately
+      restartAnimation();
+    }
+
+    speedRange.addEventListener('input', (e)=> setSpeedSec(e.target.value));
+    fasterBtn.addEventListener('click', ()=>{
+      const v = Math.max(5, Number(speedRange.value) - 2);
+      setSpeedSec(v);
+    });
+    slowerBtn.addEventListener('click', ()=>{
+      const v = Math.min(60, Number(speedRange.value) + 2);
+      setSpeedSec(v);
+    });
+
+    // restart animation trick: remove class/force reflow then re-add
+    function restartAnimation(){
+      marquee.style.animation = 'none';
+      // force reflow
+      // eslint-disable-next-line no-unused-expressions
+      marquee.offsetHeight;
+      marquee.style.animation = '';
+      // ensure play/pause state preserved
+      marquee.style.animationPlayState = isPlaying ? 'running' : 'paused';
+    }
+
+    // file load (.txt)
+    loadFileBtn.addEventListener('click', ()=> fileInput.click());
+    fileInput.addEventListener('change', async (ev)=>{
+      const f = ev.target.files[0];
+      if(!f) return;
+      const txt = await f.text();
+      input.value = txt;
+      setMarqueeContent(txt);
+      restartAnimation();
+    });
+
+    // initial placeholder
+    setMarqueeContent('Tempel lirik Anda di bawah lalu klik "Terapkan & Jalankan".');
+    setSpeedSec(Number(speedRange.value));
+  </script>
+</body>
+</html>
